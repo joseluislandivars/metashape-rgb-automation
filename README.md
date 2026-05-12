@@ -115,7 +115,3 @@ The only changes required for Windows or Linux users are:
 1. Downloading the correct Metashape `.whl` file from Agisoft.
 2. Installing that specific wheel file via pip.
 3. Ensuring your OS has standard graphical support for Python's `tkinter` (Windows includes this natively; some Linux distros might require `sudo apt-get install python3-tk`).
-
-```
-
-```
