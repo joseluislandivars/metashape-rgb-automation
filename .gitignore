@@ -1,0 +1,8 @@
+# Metashape project files
+*.files/
+*.psx
+*.log
+
+# Python
+__pycache__/
+*.py[cod]
