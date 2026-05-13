@@ -1,4 +1,4 @@
-# Metashape Photogrammetry Automation
+# Metashape RGB Photogrammetry Automation
 
 This repository contains a Python script to automate the photogrammetry processing workflow using the **Agisoft Metashape Professional Python API**.
 
