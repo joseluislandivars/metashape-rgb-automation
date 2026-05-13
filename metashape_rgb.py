@@ -1,9 +1,10 @@
 import Metashape
 import os
 import tkinter as tk
-from tkinter import filedialog, messagebox, simpledialog # Added simpledialog
+from tkinter import filedialog, messagebox, simpledialog
 
 def select_paths():
+    """UI for path selection on Mac."""
     root = tk.Tk()
     root.withdraw()
 
@@ -18,11 +19,10 @@ def select_paths():
     if not export_dir: return None, None, None
 
     # Step 3: Input Project Name
-    # We prompt the user for a name. If they cancel, it defaults to the folder name.
     suggested_name = os.path.basename(export_dir)
     proj_name = simpledialog.askstring("Project Name", "Enter the name for your project:", initialvalue=suggested_name)
 
-    # If the user hits cancel or leaves it blank, we use the fallback name
+    # Fallback to folder name if cancelled
     if not proj_name:
         proj_name = suggested_name
 
@@ -32,7 +32,7 @@ def run_metashape_automation():
     img_dir, export_dir, proj_name = select_paths()
     if not img_dir: return
 
-    # The rest of the logic remains the same, now using the custom proj_name
+    # Define paths
     project_path = os.path.join(export_dir, f"{proj_name}.psx")
     doc = Metashape.Document()
     chunk = doc.addChunk()
@@ -46,9 +46,12 @@ def run_metashape_automation():
 
     # 1. Add Photos
     photos = [os.path.join(img_dir, f) for f in os.listdir(img_dir) if f.lower().endswith(('.jpg', '.jpeg', '.tif', '.tiff'))]
+    if not photos:
+        print("No valid photos found. Closing script.")
+        return
     chunk.addPhotos(photos)
 
-    # 2. Match and Align
+    # 2. Match and Align (High Accuracy)
     chunk.matchPhotos(downscale=1, generic_preselection=True, reference_preselection=True,
                       keypoint_limit=40000, tiepoint_limit=4000)
     chunk.alignCameras(adaptive_fitting=True)
@@ -57,7 +60,7 @@ def run_metashape_automation():
     print("Detecting cross non-coded targets...")
     chunk.detectMarkers(target_type=Metashape.CrossTarget, tolerance=15, maximum_residual=10)
 
-    # Save and CLOSE the document to release the file lock
+    # Save and CLOSE to release lock for manual intervention
     doc.save(project_path)
     doc.clear()
     print(f"\n[CHECKPOINT] Detection complete. Project file lock released.")
@@ -79,7 +82,7 @@ def run_metashape_automation():
     chunk.optimizeCameras(fit_f=True, fit_cx=True, fit_cy=True, fit_k1=True, fit_k2=True, fit_k3=True,
                           fit_p1=True, fit_p2=True, fit_corrections=True)
 
-    # 6. Build Products
+    # 6. Build Products (Depth Maps + Point Cloud)
     print("Building products... this may take a while.")
     chunk.buildDepthMaps(downscale=2, filter_mode=Metashape.MildFiltering)
     chunk.buildPointCloud()
@@ -87,17 +90,37 @@ def run_metashape_automation():
     proj = Metashape.OrthoProjection()
     proj.crs = crs_utm14n
 
+    # Build DEM and Orthomosaic
     chunk.buildDem(source_data=Metashape.PointCloudData, projection=proj)
     chunk.buildOrthomosaic(surface_data=Metashape.ElevationData, projection=proj, refine_seamlines=True)
 
     doc.save()
 
     # 7. Exports
+    print("Exporting results...")
     chunk.exportReport(os.path.join(export_dir, f"{proj_name}_report.pdf"))
-    chunk.exportRaster(os.path.join(export_dir, f"{proj_name}_dsm.tif"), source_data=Metashape.ElevationData)
-    chunk.exportRaster(os.path.join(export_dir, f"{proj_name}_mosaic.tif"), source_data=Metashape.OrthomosaicData)
+    
+    # Export DSM
+    chunk.exportRaster(
+        path=os.path.join(export_dir, f"{proj_name}_dsm.tif"), 
+        source_data=Metashape.ElevationData,
+        tiff_big=True,               # Handle large file sizes > 4GB 
+        tiff_tiled=True,             # Optimized for GIS performance 
+        tiff_compression=Metashape.TiffCompressionLZW
+    )
+    
+    # Export Mosaic with Alpha Channel and BigTIFF support
+    chunk.exportRaster(
+        path=os.path.join(export_dir, f"{proj_name}_mosaic.tif"), 
+        source_data=Metashape.OrthomosaicData,
+        save_alpha=True,             # New: Included alpha channel for transparency 
+        tiff_big=True,               # New: Enabled BigTIFF for files > 4GB 
+        tiff_tiled=True,             # Tiling for optimized performance 
+        tiff_compression=Metashape.TiffCompressionJPEG, # Efficient compression for RGB 
+        jpeg_quality=90              # High-quality compression 
+    )
 
-    print("\nAutomation complete!")
+    print("\nAutomation complete! Files exported to your export folder.")
 
 if __name__ == "__main__":
     run_metashape_automation()
